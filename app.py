@@ -20,23 +20,18 @@ def init_db():
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS capturas (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        calle TEXT,
-                        numero TEXT,
-                        colonia TEXT,
-                        cp TEXT,
-                        ciudad TEXT,
                         nombre TEXT,
-                        apellido_paterno TEXT,
-                        apellido_materno TEXT,
                         seccion TEXT,
-                        celular TEXT
+                        telefono TEXT,
+                        domicilio TEXT,
+                        edad INTEGER
                      )''')
         conn.commit()
 
 init_db()
 
 # ────────────────────────────────────────────────
-# Estado de sesión
+# Estado de sesión para login
 # ────────────────────────────────────────────────
 if 'logged' not in st.session_state:
     st.session_state.logged = False
@@ -65,7 +60,6 @@ if not st.session_state.logged:
                     st.success("Bienvenido Administrador")
                     st.rerun()
                 else:
-                    # Cualquier otro usuario válido → modo usuario normal
                     st.session_state.logged = True
                     st.session_state.is_admin = False
                     st.success("Bienvenido Usuario")
@@ -83,7 +77,7 @@ else:
             st.rerun()
 
         try:
-            df = pd.read_sql_query("SELECT * FROM capturas ORDER BY id DESC", get_connection())
+            df = pd.read_sql_query("SELECT id, nombre, seccion, telefono, domicilio, edad FROM capturas ORDER BY id DESC", get_connection())
             if df.empty:
                 st.info("No hay registros aún.")
             else:
@@ -109,35 +103,26 @@ else:
             st.rerun()
 
         with st.form("form_captura", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                calle    = st.text_input("Calle")
-                numero   = st.text_input("Número")
-                colonia  = st.text_input("Colonia")
-                cp       = st.text_input("C.P.")
-                ciudad   = st.text_input("Ciudad")
-            with col2:
-                nombre         = st.text_input("Nombre")
-                ap_paterno     = st.text_input("Apellido Paterno")
-                ap_materno     = st.text_input("Apellido Materno")
-                seccion        = st.text_input("Sección")
-                celular        = st.text_input("Celular (10 dígitos)", max_chars=10)
+            nombre    = st.text_input("1. Nombre")
+            seccion   = st.text_input("2. Sección")
+            telefono  = st.text_input("3. Teléfono", max_chars=10)
+            domicilio = st.text_input("4. Domicilio")
+            edad      = st.number_input("5. Edad", min_value=0, max_value=120, step=1)
 
             if st.form_submit_button("Guardar"):
-                if not all([calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular]):
+                if not all([nombre, seccion, telefono, domicilio, edad]):
                     st.error("Todos los campos son obligatorios")
-                elif len(celular) != 10 or not celular.isdigit():
-                    st.error("El celular debe tener exactamente 10 dígitos numéricos")
+                elif len(telefono) != 10 or not telefono.isdigit():
+                    st.error("El teléfono debe tener exactamente 10 dígitos numéricos")
                 else:
                     try:
                         with get_connection() as conn:
                             c = conn.cursor()
                             c.execute('''INSERT INTO capturas 
-                                         (calle, numero, colonia, cp, ciudad, nombre, apellido_paterno, apellido_materno, seccion, celular)
-                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                                      (calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular))
+                                         (nombre, seccion, telefono, domicilio, edad)
+                                         VALUES (?, ?, ?, ?, ?)''',
+                                      (nombre, seccion, telefono, domicilio, edad))
                             conn.commit()
                         st.success("¡Datos guardados correctamente! (solo para esta sesión de demo)")
-                        # st.balloons()  ← quitado
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
