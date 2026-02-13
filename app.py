@@ -48,8 +48,8 @@ if not st.session_state.logged:
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        usuario = st.text_input("Usuario", placeholder="Ej: admin o tu nombre")
-        contraseña = st.text_input("Contraseña", type="password", placeholder="Ej: 1234")
+        usuario = st.text_input("Usuario", placeholder="Ej: tu nombre")
+        contraseña = st.text_input("Contraseña", type="password", placeholder="Ej: 12345678")
 
         if st.button("Entrar", type="primary", use_container_width=True):
             if not usuario or not contraseña:
