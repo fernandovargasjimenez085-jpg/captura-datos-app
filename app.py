@@ -20,6 +20,7 @@ def init_db():
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS capturas (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        usuario TEXT,           -- nuevo: quién registró
                         nombre TEXT,
                         seccion TEXT,
                         telefono TEXT,
@@ -36,6 +37,7 @@ init_db()
 if 'logged' not in st.session_state:
     st.session_state.logged = False
     st.session_state.is_admin = False
+    st.session_state.usuario = None  # guardamos el nombre del usuario logueado
 
 # ────────────────────────────────────────────────
 # Pantalla de login (primera vista)
@@ -46,24 +48,28 @@ if not st.session_state.logged:
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        usuario = st.text_input("Usuario", placeholder="Ej: admin")
+        usuario = st.text_input("Usuario", placeholder="Ej: admin o tu nombre")
         contraseña = st.text_input("Contraseña", type="password", placeholder="Ej: 1234")
 
         if st.button("Entrar", type="primary", use_container_width=True):
             if not usuario or not contraseña:
                 st.error("Ingresa usuario y contraseña")
             else:
-                # Credenciales de demo (cámbialas si quieres)
+                # Credenciales de demo (solo admin tiene contraseña especial)
                 if usuario.strip().lower() == "admin" and contraseña == "1234":
                     st.session_state.logged = True
                     st.session_state.is_admin = True
+                    st.session_state.usuario = "admin"
                     st.success("Bienvenido Administrador")
                     st.rerun()
-                else:
+                elif contraseña == "demo":  # contraseña genérica para usuarios normales
                     st.session_state.logged = True
                     st.session_state.is_admin = False
-                    st.success("Bienvenido Usuario")
+                    st.session_state.usuario = usuario.strip()
+                    st.success(f"Bienvenido {usuario.strip()}")
                     st.rerun()
+                else:
+                    st.error("Contraseña incorrecta")
 
 else:
     # ────────────────────────────────────────────────
@@ -71,13 +77,19 @@ else:
     # ────────────────────────────────────────────────
     if st.session_state.is_admin:
         st.title("🛠 Panel Administrador")
+        st.markdown(f"Logueado como: **{st.session_state.usuario}**")
         if st.button("Cerrar sesión"):
             st.session_state.logged = False
             st.session_state.is_admin = False
+            st.session_state.usuario = None
             st.rerun()
 
         try:
-            df = pd.read_sql_query("SELECT id, nombre, seccion, telefono, domicilio, edad FROM capturas ORDER BY id DESC", get_connection())
+            df = pd.read_sql_query("""
+                SELECT id, usuario, nombre, seccion, telefono, domicilio, edad 
+                FROM capturas 
+                ORDER BY id DESC
+            """, get_connection())
             if df.empty:
                 st.info("No hay registros aún.")
             else:
@@ -98,8 +110,10 @@ else:
 
     else:
         st.title("📝 Captura de Datos")
+        st.markdown(f"Logueado como: **{st.session_state.usuario}**")
         if st.button("Cerrar sesión"):
             st.session_state.logged = False
+            st.session_state.usuario = None
             st.rerun()
 
         with st.form("form_captura", clear_on_submit=True):
@@ -119,10 +133,10 @@ else:
                         with get_connection() as conn:
                             c = conn.cursor()
                             c.execute('''INSERT INTO capturas 
-                                         (nombre, seccion, telefono, domicilio, edad)
-                                         VALUES (?, ?, ?, ?, ?)''',
-                                      (nombre, seccion, telefono, domicilio, edad))
+                                         (usuario, nombre, seccion, telefono, domicilio, edad)
+                                         VALUES (?, ?, ?, ?, ?, ?)''',
+                                      (st.session_state.usuario, nombre, seccion, telefono, domicilio, edad))
                             conn.commit()
-                        st.success("¡Datos guardados correctamente! (solo para esta sesión de demo)")
+                        st.success(f"¡Datos guardados correctamente por {st.session_state.usuario}! (demo)")
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
