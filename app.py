@@ -1,92 +1,98 @@
+import os
 import streamlit as st
 import sqlalchemy as sa
 from sqlalchemy import text
 import pandas as pd
-import os
 
 # ────────────────────────────────────────────────
-#  Configuración
+# Configuración básica de la app
 # ────────────────────────────────────────────────
-
 st.set_page_config(
     page_title="Captura de Datos",
     layout="centered",
     initial_sidebar_state="expanded"
 )
 
-# Cambia esto por tu cadena real de Supabase (o Neon, etc.)
-# Formato: postgresql://user:password@host:port/dbname?sslmode=require
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:tucontraseña@localhost:5432/postgres")
+# ────────────────────────────────────────────────
+# Conexión a la base de datos remota
+# ────────────────────────────────────────────────
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Si no hay variable de entorno → modo desarrollo local (cambia a tu local si quieres)
-if "localhost" in DATABASE_URL:
-    st.warning("Usando base de datos local de desarrollo. En producción configura DATABASE_URL.")
+if not DATABASE_URL:
+    st.error("No se encontró la variable DATABASE_URL en las variables de entorno.")
+    st.error("Configúrala en Secrets (Streamlit Cloud) o en Environment Variables (Render).")
+    st.stop()
+
+# Creamos el engine con opciones recomendadas para Neon / Supabase
+engine = sa.create_engine(
+    DATABASE_URL,
+    connect_args={
+        "options": "-csearch_path=public",
+        "sslmode": "require"          # fuerza SSL si no está en la URL
+    }
+)
 
 # ────────────────────────────────────────────────
-# Conexión a la base de datos
+# Crear tabla si no existe (se ejecuta solo una vez al inicio)
 # ────────────────────────────────────────────────
-
-@st.cache_resource
-def get_engine():
-    return sa.create_engine(DATABASE_URL, connect_args={"options": "-csearch_path=public"})
-
-engine = get_engine()
-
-# Crear tabla si no existe
 def init_db():
-    with engine.connect() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS capturas (
-                id SERIAL PRIMARY KEY,
-                calle TEXT NOT NULL,
-                numero TEXT NOT NULL,
-                colonia TEXT NOT NULL,
-                cp TEXT NOT NULL,
-                ciudad TEXT NOT NULL,
-                nombre TEXT NOT NULL,
-                apellido_paterno TEXT NOT NULL,
-                apellido_materno TEXT NOT NULL,
-                seccion TEXT NOT NULL,
-                celular TEXT NOT NULL
-            );
-        """))
-        conn.commit()
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS capturas (
+                    id SERIAL PRIMARY KEY,
+                    calle TEXT NOT NULL,
+                    numero TEXT NOT NULL,
+                    colonia TEXT NOT NULL,
+                    cp TEXT NOT NULL,
+                    ciudad TEXT NOT NULL,
+                    nombre TEXT NOT NULL,
+                    apellido_paterno TEXT NOT NULL,
+                    apellido_materno TEXT NOT NULL,
+                    seccion TEXT NOT NULL,
+                    celular TEXT NOT NULL
+                );
+            """))
+            conn.commit()
+            # print("Tabla capturas verificada/creada correctamente")  # descomenta para logs
+    except Exception as e:
+        st.error(f"Error al crear/verificar la tabla: {str(e)}")
+        st.stop()
 
+# Ejecutamos la inicialización (puedes comentarlo después de la primera ejecución)
 init_db()
 
 # ────────────────────────────────────────────────
 # Sidebar - Selección de rol
 # ────────────────────────────────────────────────
-
 st.sidebar.title("Perfil")
 rol = st.sidebar.radio("Elige tu rol", ["👤 Usuario", "🛠️ Administrador"])
 
 # ────────────────────────────────────────────────
-# Usuario: Formulario de captura
+# Rol: USUARIO - Formulario de captura
 # ────────────────────────────────────────────────
-
 if rol == "👤 Usuario":
     st.title("📝 Captura de Datos")
-    st.markdown("Completa todos los campos")
+    st.markdown("Completa todos los campos para registrar la información")
 
     with st.form("form_captura", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            calle    = st.text_input("Calle")
-            numero   = st.text_input("Número")
-            colonia  = st.text_input("Colonia")
-            cp       = st.text_input("C.P.")
-            ciudad   = st.text_input("Ciudad")
+            calle    = st.text_input("Calle", key="calle")
+            numero   = st.text_input("Número", key="numero")
+            colonia  = st.text_input("Colonia", key="colonia")
+            cp       = st.text_input("C.P.", key="cp")
+            ciudad   = st.text_input("Ciudad", key="ciudad")
         with col2:
-            nombre         = st.text_input("Nombre")
-            ap_paterno     = st.text_input("Apellido Paterno")
-            ap_materno     = st.text_input("Apellido Materno")
-            seccion        = st.text_input("Sección")
-            celular        = st.text_input("Celular (10 dígitos)", max_chars=10)
+            nombre         = st.text_input("Nombre", key="nombre")
+            ap_paterno     = st.text_input("Apellido Paterno", key="ap_paterno")
+            ap_materno     = st.text_input("Apellido Materno", key="ap_materno")
+            seccion        = st.text_input("Sección", key="seccion")
+            celular        = st.text_input("Celular (10 dígitos)", max_chars=10, key="celular")
 
-        guardar = st.form_submit_button("Guardar", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Guardar", type="primary", use_container_width=True)
 
-    if guardar:
+    if submitted:
         if not all([calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular]):
             st.error("Todos los campos son obligatorios")
         elif len(celular) != 10 or not celular.isdigit():
@@ -108,15 +114,14 @@ if rol == "👤 Usuario":
                         "seccion": seccion, "celular": celular
                     })
                     conn.commit()
-                st.success("¡Datos guardados exitosamente!")
+                st.success("¡Datos guardados correctamente!")
                 st.balloons()
             except Exception as e:
-                st.error(f"Error al guardar: {str(e)}")
+                st.error(f"Error al guardar los datos: {str(e)}")
 
 # ────────────────────────────────────────────────
-# Administrador: Login + Tabla + Borrar
+# Rol: ADMINISTRADOR - Login + Tabla + Eliminación
 # ────────────────────────────────────────────────
-
 else:
     if 'admin_logged' not in st.session_state:
         st.session_state.admin_logged = False
@@ -127,42 +132,49 @@ else:
         contraseña = st.text_input("Contraseña", type="password")
 
         if st.button("Iniciar sesión", type="primary"):
-            if usuario == "admin" and contraseña == "1234":  # ¡cambia esto en producción!
+            # ¡Cambia estas credenciales por algo más seguro en producción!
+            if usuario == "admin" and contraseña == "1234":
                 st.session_state.admin_logged = True
                 st.rerun()
             else:
-                st.error("Credenciales incorrectas")
+                st.error("Usuario o contraseña incorrectos")
     else:
         st.title("🛠 Panel Administrador")
         if st.button("Cerrar sesión"):
             st.session_state.admin_logged = False
             st.rerun()
 
-        # Cargar datos
         try:
             df = pd.read_sql("SELECT * FROM capturas ORDER BY id DESC", engine)
-            st.dataframe(df, use_container_width=True, height=450)
+            
+            if df.empty:
+                st.info("Aún no hay registros en la base de datos.")
+            else:
+                st.dataframe(df, use_container_width=True, height=450)
 
             st.subheader("Eliminar registros")
-            ids_a_borrar = st.multiselect(
-                "Selecciona ID(s) a eliminar",
+            ids_a_eliminar = st.multiselect(
+                "Selecciona los ID que deseas eliminar",
                 options=df["id"].tolist(),
                 format_func=lambda x: f"ID {x}"
             )
 
             if st.button("🗑 Eliminar seleccionados", type="secondary"):
-                if not ids_a_borrar:
+                if not ids_a_eliminar:
                     st.warning("Selecciona al menos un registro")
                 else:
-                    with st.spinner("Eliminando..."):
-                        with engine.connect() as conn:
-                            conn.execute(
-                                text("DELETE FROM capturas WHERE id = ANY(:ids)"),
-                                {"ids": ids_a_borrar}
-                            )
-                            conn.commit()
-                    st.success(f"Eliminados {len(ids_a_borrar)} registro(s)")
-                    st.rerun()
+                    if st.checkbox(f"Confirmar eliminación de {len(ids_a_eliminar)} registro(s)", value=False):
+                        try:
+                            with engine.connect() as conn:
+                                conn.execute(
+                                    text("DELETE FROM capturas WHERE id = ANY(:ids)"),
+                                    {"ids": ids_a_eliminar}
+                                )
+                                conn.commit()
+                            st.success(f"Se eliminaron {len(ids_a_eliminar)} registro(s)")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al eliminar: {str(e)}")
         except Exception as e:
-            st.error(f"Error al conectar/leer la base de datos:\n{str(e)}")
-            st.info("Verifica que DATABASE_URL esté bien configurada en las variables de entorno de Render.")
+            st.error(f"No se pudo conectar o leer la base de datos: {str(e)}")
+            st.info("Verifica que DATABASE_URL esté correctamente configurada en Secrets / Variables de entorno.")
