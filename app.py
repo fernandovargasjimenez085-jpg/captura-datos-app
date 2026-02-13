@@ -83,7 +83,6 @@ if rol == "Usuario":
                                   (calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular))
                         conn.commit()
                     st.success("¡Datos guardados! (solo para esta sesión de demo)")
-                    st.balloons()
                 except Exception as e:
                     st.error(f"Error al guardar: {e}")
 
