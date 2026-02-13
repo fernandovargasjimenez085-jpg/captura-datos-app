@@ -4,22 +4,15 @@ import pandas as pd
 import os
 
 # ────────────────────────────────────────────────
-# Configuración básica
+# Configuración
 # ────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Captura de Datos - DEMO",
-    layout="wide"
-)
+st.set_page_config(page_title="Captura de Datos - DEMO", layout="wide")
 
-# Usamos ruta relativa en la carpeta actual (permitida en free tier)
 DB_PATH = "datos.db"
 
-# ────────────────────────────────────────────────
-# Conexión y creación de tabla
-# ────────────────────────────────────────────────
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # para que las filas sean como diccionarios
+    conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
@@ -43,77 +36,52 @@ def init_db():
 init_db()
 
 # ────────────────────────────────────────────────
-# Sidebar - selección de rol
+# Estado de sesión para controlar qué vista mostrar
 # ────────────────────────────────────────────────
-rol = st.sidebar.radio("Perfil", ["Usuario", "Administrador"])
-
-# ────────────────────────────────────────────────
-# Rol: Usuario → formulario de captura
-# ────────────────────────────────────────────────
-if rol == "Usuario":
-    st.title("📝 Captura de Datos (DEMO)")
-
-    with st.form("form_captura", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            calle    = st.text_input("Calle")
-            numero   = st.text_input("Número")
-            colonia  = st.text_input("Colonia")
-            cp       = st.text_input("C.P.")
-            ciudad   = st.text_input("Ciudad")
-        with col2:
-            nombre         = st.text_input("Nombre")
-            ap_paterno     = st.text_input("Apellido Paterno")
-            ap_materno     = st.text_input("Apellido Materno")
-            seccion        = st.text_input("Sección")
-            celular        = st.text_input("Celular (10 dígitos)", max_chars=10)
-
-        if st.form_submit_button("Guardar"):
-            if not all([calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular]):
-                st.error("Todos los campos son obligatorios")
-            elif len(celular) != 10 or not celular.isdigit():
-                st.error("El celular debe tener exactamente 10 dígitos numéricos")
-            else:
-                try:
-                    with get_connection() as conn:
-                        c = conn.cursor()
-                        c.execute('''INSERT INTO capturas 
-                                     (calle, numero, colonia, cp, ciudad, nombre, apellido_paterno, apellido_materno, seccion, celular)
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                                  (calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular))
-                        conn.commit()
-                    st.success("¡Datos guardados! (solo para esta sesión de demo)")
-                except Exception as e:
-                    st.error(f"Error al guardar: {e}")
+if 'logged' not in st.session_state:
+    st.session_state.logged = False
+    st.session_state.is_admin = False
 
 # ────────────────────────────────────────────────
-# Rol: Administrador → login simple + tabla + borrar
+# Pantalla de login (primera vista)
 # ────────────────────────────────────────────────
-else:
-    st.title("🛠 Panel Administrador (DEMO)")
+if not st.session_state.logged:
+    st.title("Iniciar Sesión")
+    st.markdown("Ingresa tu usuario para continuar")
 
-    if 'logged_in' not in st.session_state:
-        st.session_state.logged_in = False
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        usuario = st.text_input("Usuario", placeholder="Ej: admin o cualquier nombre")
 
-    if not st.session_state.logged_in:
-        usuario = st.text_input("Usuario")
-        contraseña = st.text_input("Contraseña", type="password")
-        if st.button("Entrar"):
-            # Credenciales de demo (cámbialas si quieres)
-            if usuario == "admin" and contraseña == "1234":
-                st.session_state.logged_in = True
+        if st.button("Entrar", type="primary", use_container_width=True):
+            if usuario.strip():
+                st.session_state.logged = True
+                # Lógica simple: si el usuario es "admin" → modo administrador
+                if usuario.strip().lower() == "admin":
+                    st.session_state.is_admin = True
+                    st.success("Bienvenido Administrador")
+                else:
+                    st.session_state.is_admin = False
+                    st.success("Bienvenido Usuario")
                 st.rerun()
             else:
-                st.error("Usuario o contraseña incorrectos")
-    else:
+                st.error("Por favor ingresa un usuario")
+
+else:
+    # ────────────────────────────────────────────────
+    # Vista según el tipo de usuario
+    # ────────────────────────────────────────────────
+    if st.session_state.is_admin:
+        st.title("🛠 Panel Administrador")
         if st.button("Cerrar sesión"):
-            st.session_state.logged_in = False
+            st.session_state.logged = False
+            st.session_state.is_admin = False
             st.rerun()
 
         try:
             df = pd.read_sql_query("SELECT * FROM capturas ORDER BY id DESC", get_connection())
             if df.empty:
-                st.info("No hay registros aún en esta sesión de demo.")
+                st.info("No hay registros aún.")
             else:
                 st.dataframe(df, use_container_width=True)
 
@@ -129,3 +97,43 @@ else:
                 st.rerun()
         except Exception as e:
             st.error(f"Error al leer la base de datos: {e}")
+
+    else:
+        st.title("📝 Captura de Datos")
+        if st.button("Cerrar sesión"):
+            st.session_state.logged = False
+            st.rerun()
+
+        with st.form("form_captura", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                calle    = st.text_input("Calle")
+                numero   = st.text_input("Número")
+                colonia  = st.text_input("Colonia")
+                cp       = st.text_input("C.P.")
+                ciudad   = st.text_input("Ciudad")
+            with col2:
+                nombre         = st.text_input("Nombre")
+                ap_paterno     = st.text_input("Apellido Paterno")
+                ap_materno     = st.text_input("Apellido Materno")
+                seccion        = st.text_input("Sección")
+                celular        = st.text_input("Celular (10 dígitos)", max_chars=10)
+
+            if st.form_submit_button("Guardar"):
+                if not all([calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular]):
+                    st.error("Todos los campos son obligatorios")
+                elif len(celular) != 10 or not celular.isdigit():
+                    st.error("El celular debe tener exactamente 10 dígitos numéricos")
+                else:
+                    try:
+                        with get_connection() as conn:
+                            c = conn.cursor()
+                            c.execute('''INSERT INTO capturas 
+                                         (calle, numero, colonia, cp, ciudad, nombre, apellido_paterno, apellido_materno, seccion, celular)
+                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                      (calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular))
+                            conn.commit()
+                        st.success("¡Datos guardados correctamente! (solo para esta sesión de demo)")
+                        # st.balloons()  ← comentado / quitado
+                    except Exception as e:
+                        st.error(f"Error al guardar: {e}")
