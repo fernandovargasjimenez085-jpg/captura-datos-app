@@ -36,7 +36,7 @@ def init_db():
 init_db()
 
 # ────────────────────────────────────────────────
-# Estado de sesión para controlar qué vista mostrar
+# Estado de sesión
 # ────────────────────────────────────────────────
 if 'logged' not in st.session_state:
     st.session_state.logged = False
@@ -47,29 +47,33 @@ if 'logged' not in st.session_state:
 # ────────────────────────────────────────────────
 if not st.session_state.logged:
     st.title("Iniciar Sesión")
-    st.markdown("Ingresa tu usuario para continuar")
+    st.markdown("Ingresa tus credenciales para continuar")
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        usuario = st.text_input("Usuario", placeholder="Ej: admin o cualquier nombre")
+        usuario = st.text_input("Usuario", placeholder="Ej: admin")
+        contraseña = st.text_input("Contraseña", type="password", placeholder="Ej: 1234")
 
         if st.button("Entrar", type="primary", use_container_width=True):
-            if usuario.strip():
-                st.session_state.logged = True
-                # Lógica simple: si el usuario es "admin" → modo administrador
-                if usuario.strip().lower() == "admin":
+            if not usuario or not contraseña:
+                st.error("Ingresa usuario y contraseña")
+            else:
+                # Credenciales de demo (cámbialas si quieres)
+                if usuario.strip().lower() == "admin" and contraseña == "1234":
+                    st.session_state.logged = True
                     st.session_state.is_admin = True
                     st.success("Bienvenido Administrador")
+                    st.rerun()
                 else:
+                    # Cualquier otro usuario válido → modo usuario normal
+                    st.session_state.logged = True
                     st.session_state.is_admin = False
                     st.success("Bienvenido Usuario")
-                st.rerun()
-            else:
-                st.error("Por favor ingresa un usuario")
+                    st.rerun()
 
 else:
     # ────────────────────────────────────────────────
-    # Vista según el tipo de usuario
+    # Vista según rol
     # ────────────────────────────────────────────────
     if st.session_state.is_admin:
         st.title("🛠 Panel Administrador")
@@ -134,6 +138,6 @@ else:
                                       (calle, numero, colonia, cp, ciudad, nombre, ap_paterno, ap_materno, seccion, celular))
                             conn.commit()
                         st.success("¡Datos guardados correctamente! (solo para esta sesión de demo)")
-                        # st.balloons()  ← comentado / quitado
+                        # st.balloons()  ← quitado
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
