@@ -4,7 +4,7 @@ import pandas as pd
 import os
 
 # ────────────────────────────────────────────────
-# Configuración
+# Configuración general de la app
 # ────────────────────────────────────────────────
 st.set_page_config(page_title="Captura de Datos - DEMO", layout="wide")
 
@@ -32,7 +32,7 @@ def init_db():
 init_db()
 
 # ────────────────────────────────────────────────
-# Estado de sesión para login
+# Estado de sesión para manejar login
 # ────────────────────────────────────────────────
 if 'logged' not in st.session_state:
     st.session_state.logged = False
@@ -40,7 +40,7 @@ if 'logged' not in st.session_state:
     st.session_state.usuario = None
 
 # ────────────────────────────────────────────────
-# Pantalla de login
+# Pantalla de login (se muestra al inicio)
 # ────────────────────────────────────────────────
 if not st.session_state.logged:
     st.title("Iniciar Sesión")
@@ -55,6 +55,7 @@ if not st.session_state.logged:
             if not usuario or not contraseña:
                 st.error("Ingresa usuario y contraseña")
             else:
+                # Credenciales de demo (puedes cambiarlas)
                 if usuario.strip().lower() == "admin" and contraseña == "1234":
                     st.session_state.logged = True
                     st.session_state.is_admin = True
@@ -72,7 +73,7 @@ if not st.session_state.logged:
 
 else:
     # ────────────────────────────────────────────────
-    # Vista según rol
+    # Vista principal según rol
     # ────────────────────────────────────────────────
     if st.session_state.is_admin:
         st.title("🛠 Panel Administrador")
@@ -85,14 +86,14 @@ else:
 
         try:
             conn = get_connection()
-            # Obtener lista única de usuarios que han registrado algo
+            # Obtener usuarios únicos que han registrado algo
             usuarios_df = pd.read_sql_query("SELECT DISTINCT usuario FROM capturas WHERE usuario IS NOT NULL ORDER BY usuario", conn)
             usuarios = ["Todos"] + usuarios_df['usuario'].tolist()
 
-            # Selector de usuario
-            usuario_seleccionado = st.selectbox("Filtrar por usuario que registró", usuarios)
+            # Filtro por usuario
+            usuario_seleccionado = st.selectbox("Filtrar registros por usuario", usuarios)
 
-            # Consulta base
+            # Consulta con filtro
             query = "SELECT id, usuario, nombre, seccion, telefono, domicilio, edad FROM capturas"
             params = ()
             if usuario_seleccionado != "Todos":
@@ -148,6 +149,7 @@ else:
                                          VALUES (?, ?, ?, ?, ?, ?)''',
                                       (st.session_state.usuario, nombre, seccion, telefono, domicilio, edad))
                             conn.commit()
-                        st.success(f"¡Datos guardados por {st.session_state.usuario}! (demo)")
+                        st.success("¡Registro guardado correctamente!", icon="✅")
+                        st.toast("Datos registrados con éxito", icon="✅")
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
