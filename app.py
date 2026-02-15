@@ -78,10 +78,8 @@ if not st.session_state.logged:
                     st.error("Contraseña incorrecta")
 
 else:
-    # ────────────────────────────────────────────────
-    # Vista según rol
-    # ────────────────────────────────────────────────
     if st.session_state.is_admin:
+        # Panel admin (sin cambios relevantes aquí)
         st.title("🛠 Panel Administrador")
         st.markdown(f"Logueado como: **{st.session_state.usuario}**")
         if st.button("Cerrar sesión"):
@@ -145,6 +143,7 @@ else:
         # Solicitud visible de ubicación
         st.info("**Importante:** Para continuar, necesitamos tu ubicación actual. Esto permite asociar el registro con tu posición geográfica.")
 
+        # Botón para solicitar ubicación
         if not st.session_state.location_granted:
             st.warning("Haz clic en el botón para permitir el acceso a tu ubicación")
 
@@ -164,6 +163,7 @@ else:
                         (error) => {
                             const url = new URL(window.location);
                             url.searchParams.set('location_status', 'error');
+                            url.searchParams.set('error_msg', error.message);
                             window.location = url;
                         },
                         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -171,26 +171,25 @@ else:
                     </script>
                 """, height=0)
 
-            # Leer parámetros de la URL después de recarga
-            if "location_status" in st.query_params:
-                status = st.query_params["location_status"]
-                if status == "success" and "lat" in st.query_params and "lon" in st.query_params:
-                    st.session_state.location_granted = True
-                    st.session_state.lat = float(st.query_params["lat"])
-                    st.session_state.lon = float(st.query_params["lon"])
-                    st.success("¡Ubicación obtenida correctamente!")
-                    # Limpiar params
-                    for key in ["location_status", "lat", "lon"]:
-                        if key in st.query_params:
-                            del st.query_params[key]
-                    st.rerun()
-                elif status == "error":
-                    st.session_state.location_granted = False
-                    st.error("No se pudo obtener la ubicación. Debes permitir el acceso.")
-                    st.info("Por favor activa la ubicación y vuelve a intentarlo.")
-                    # Limpiar params
-                    if "location_status" in st.query_params:
-                        del st.query_params["location_status"]
+            # Detectar si ya tenemos ubicación (permiso previo concedido)
+            if st.query_params.get("location_status") == "success":
+                st.session_state.location_granted = True
+                st.session_state.lat = float(st.query_params.get("lat", [0])[0])
+                st.session_state.lon = float(st.query_params.get("lon", [0])[0])
+                st.success("¡Ubicación obtenida correctamente!")
+                # Limpiar parámetros
+                for key in ["location_status", "lat", "lon"]:
+                    if key in st.query_params:
+                        del st.query_params[key]
+                st.rerun()
+            elif st.query_params.get("location_status") == "error":
+                st.session_state.location_granted = False
+                st.error("No se pudo obtener la ubicación: " + st.query_params.get("error_msg", ["desconocido"])[0])
+                st.info("Por favor activa la ubicación en la configuración del navegador y vuelve a intentarlo.")
+                # Limpiar
+                del st.query_params["location_status"]
+                if "error_msg" in st.query_params:
+                    del st.query_params["error_msg"]
         else:
             st.success(f"Ubicación activa: {st.session_state.lat:.6f}, {st.session_state.lon:.6f}")
 
