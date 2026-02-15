@@ -36,145 +36,180 @@ if 'logged' not in st.session_state:
     st.session_state.is_admin = False
     st.session_state.usuario = None
 
-if 'location_granted' not in st.session_state:
-    st.session_state.location_granted = False
+if 'lat' not in st.session_state:
     st.session_state.lat = None
-    st.session_state.lon = None
+    st.session_state.lng = None
+    st.session_state.location_granted = False
 
-# Login (sin cambios)
+# ─── LOGIN ────────────────────────────────────────────────────────────────
 if not st.session_state.logged:
     st.title("Iniciar Sesión")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        usuario = st.text_input("Usuario", placeholder="Ej: admin o tu nombre")
-        contraseña = st.text_input("Contraseña", type="password", placeholder="Ej: 1234 o demo")
+        usuario = st.text_input("Usuario")
+        contraseña = st.text_input("Contraseña", type="password")
 
-        if st.button("Entrar"):
-            if usuario.strip().lower() == "admin" and contraseña == "1234":
-                st.session_state.logged = True
-                st.session_state.is_admin = True
-                st.session_state.usuario = "admin"
-                st.rerun()
-            elif contraseña == "demo":
-                st.session_state.logged = True
-                st.session_state.is_admin = False
-                st.session_state.usuario = usuario.strip() or "Usuario"
-                st.rerun()
+        if st.button("Entrar", type="primary"):
+            if not usuario or not contraseña:
+                st.error("Ingresa usuario y contraseña")
             else:
-                st.error("Credenciales incorrectas")
+                if usuario.strip().lower() == "admin" and contraseña == "1234":
+                    st.session_state.logged = True
+                    st.session_state.is_admin = True
+                    st.session_state.usuario = "admin"
+                    st.rerun()
+                elif contraseña == "demo":
+                    st.session_state.logged = True
+                    st.session_state.is_admin = False
+                    st.session_state.usuario = usuario.strip()
+                    st.rerun()
+                else:
+                    st.error("Contraseña incorrecta")
 
 else:
     if st.session_state.is_admin:
+        # ─── PANEL ADMIN ──────────────────────────────────────────────────────
         st.title("Panel Administrador")
+        st.markdown(f"Logueado como: **{st.session_state.usuario}**")
         if st.button("Cerrar sesión"):
             st.session_state.logged = False
+            st.session_state.usuario = None
             st.rerun()
 
-        conn = get_connection()
-        usuarios = ["Todos"] + pd.read_sql_query("SELECT DISTINCT usuario FROM capturas", conn)['usuario'].dropna().unique().tolist()
+        try:
+            conn = get_connection()
+            usuarios_df = pd.read_sql_query("SELECT DISTINCT usuario FROM capturas WHERE usuario IS NOT NULL ORDER BY usuario", conn)
+            usuarios = ["Todos"] + usuarios_df['usuario'].tolist()
 
-        filtro_usuario = st.selectbox("Filtrar por usuario", usuarios)
+            usuario_sel = st.selectbox("Filtrar por usuario", usuarios)
 
-        query = "SELECT * FROM capturas"
-        if filtro_usuario != "Todos":
-            query += f" WHERE usuario = '{filtro_usuario}'"
-        query += " ORDER BY id DESC"
+            query = "SELECT id, usuario, nombre, seccion, telefono, domicilio, edad, latitud, longitud FROM capturas"
+            params = ()
+            if usuario_sel != "Todos":
+                query += " WHERE usuario = ?"
+                params = (usuario_sel,)
 
-        df = pd.read_sql_query(query, conn)
+            query += " ORDER BY id DESC"
+            df = pd.read_sql_query(query, conn, params=params)
 
-        def maps_link(row):
-            if pd.notna(row.get('latitud')) and pd.notna(row.get('longitud')):
-                return f"[Ver en Maps](https://www.google.com/maps?q={row['latitud']},{row['longitud']})"
-            return "Sin ubicación"
+            if not df.empty:
+                # Crear link a Google Maps
+                df['Mapa'] = df.apply(
+                    lambda row: f"[Ver en Google Maps](https://www.google.com/maps?q={row['latitud']},{row['longitud']})" 
+                    if pd.notnull(row['latitud']) and pd.notnull(row['longitud']) else "Sin ubicación",
+                    axis=1
+                )
 
-        if not df.empty:
-            df['Ubicación'] = df.apply(maps_link, axis=1)
-            st.dataframe(df, use_container_width=True)
+            if df.empty:
+                st.info("No hay registros para el filtro seleccionado.")
+            else:
+                st.dataframe(df, use_container_width=True)
 
-        ids = st.multiselect("Eliminar IDs", df['id'].tolist() if not df.empty else [])
-        if st.button("Borrar seleccionados") and ids:
-            with conn:
-                placeholders = ','.join('?' * len(ids))
-                conn.execute(f"DELETE FROM capturas WHERE id IN ({placeholders})", ids)
-            st.success(f"Eliminados {len(ids)} registros")
-            st.rerun()
+            # Eliminar
+            st.subheader("Eliminar registros")
+            ids = st.multiselect("Selecciona IDs", df['id'].tolist())
+            if st.button("Borrar seleccionados") and ids:
+                with conn:
+                    c = conn.cursor()
+                    placeholders = ','.join('?' * len(ids))
+                    c.execute(f"DELETE FROM capturas WHERE id IN ({placeholders})", ids)
+                st.success(f"Eliminados {len(ids)} registros")
+                st.rerun()
+
+        except Exception as e:
+            st.error(f"Error: {e}")
 
     else:
+        # ─── USUARIO NORMAL ───────────────────────────────────────────────────
         st.title("Captura de Datos")
-        st.markdown(f"Usuario: **{st.session_state.usuario}**")
+        st.markdown(f"Logueado como: **{st.session_state.usuario}**")
 
         if st.button("Cerrar sesión"):
             st.session_state.logged = False
+            st.session_state.usuario = None
             st.rerun()
 
-        st.info("Necesitamos tu ubicación actual para registrar el dato.")
-
-        # Solicitud de ubicación con botón visible
+        # ─── SOLICITUD DE UBICACIÓN ───────────────────────────────────────────
         if not st.session_state.location_granted:
-            st.warning("Pulsa el botón para activar la ubicación")
+            st.warning("Esta aplicación necesita tu ubicación para continuar.")
+            st.info("Por favor permite el acceso a la ubicación cuando el navegador te lo pregunte.")
 
-            if st.button("Activar mi ubicación", type="primary"):
-                st.components.v1.html("""
-                    <script>
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const lat = position.coords.latitude;
-                            const lon = position.coords.longitude;
-                            const url = new URL(window.location);
-                            url.searchParams.set('loc_status', 'ok');
-                            url.searchParams.set('lat', lat);
-                            url.searchParams.set('lon', lon);
-                            window.location = url;
-                        },
-                        (error) => {
-                            const url = new URL(window.location);
-                            url.searchParams.set('loc_status', 'denied');
-                            url.searchParams.set('msg', error.message);
-                            window.location = url;
-                        },
-                        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-                    );
-                    </script>
-                """, height=0)
+            # JavaScript para pedir ubicación
+            js_code = """
+            <script>
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    window.parent.postMessage({
+                        type: 'streamlit:geolocation',
+                        lat: lat,
+                        lng: lng
+                    }, "*");
+                },
+                (error) => {
+                    window.parent.postMessage({
+                        type: 'streamlit:geolocation_error',
+                        code: error.code,
+                        message: error.message
+                    }, "*");
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+            </script>
+            """
 
-            # Leer parámetros después de recarga
-            if "loc_status" in st.query_params:
-                if st.query_params["loc_status"] == "ok":
+            st.components.v1.html(js_code, height=0)
+
+            # Escuchar respuesta de JS
+            if "geolocation" in st.query_params:
+                try:
+                    lat = float(st.query_params["lat"][0])
+                    lng = float(st.query_params["lng"][0])
+                    st.session_state.lat = lat
+                    st.session_state.lng = lng
                     st.session_state.location_granted = True
-                    st.session_state.lat = float(st.query_params.get("lat", [0])[0])
-                    st.session_state.lon = float(st.query_params.get("lon", [0])[0])
-                    st.success("Ubicación activada")
-                    # Limpiar params
-                    del st.query_params["loc_status"]
-                    del st.query_params["lat"]
-                    del st.query_params["lon"]
+                    st.success("Ubicación obtenida correctamente.")
                     st.rerun()
-                else:
-                    st.error("Ubicación denegada: " + st.query_params.get("msg", ["error"])[0])
-                    del st.query_params["loc_status"]
+                except:
+                    pass
+
+            if "geolocation_error" in st.query_params:
+                code = st.query_params["code"][0]
+                msg = st.query_params["message"][0]
+                st.error(f"No se pudo obtener la ubicación: {msg} (código {code})")
+                st.warning("Debes permitir el acceso a la ubicación para continuar.")
+                st.stop()  # BLOQUEA el avance
 
         else:
-            st.success(f"Ubicación activa: {st.session_state.lat:.5f}, {st.session_state.lon:.5f}")
+            # Formulario solo aparece si ya tenemos ubicación
+            st.success(f"Ubicación actual: Lat {st.session_state.lat:.6f}, Lng {st.session_state.lng:.6f}")
 
-        # Formulario
-        with st.form("form"):
-            nombre = st.text_input("Nombre")
-            seccion = st.text_input("Sección")
-            telefono = st.text_input("Teléfono")
-            domicilio = st.text_input("Domicilio")
-            edad = st.number_input("Edad", min_value=0, step=1)
+            with st.form("form_captura", clear_on_submit=True):
+                nombre    = st.text_input("1. Nombre")
+                seccion   = st.text_input("2. Sección")
+                telefono  = st.text_input("3. Teléfono", max_chars=10)
+                domicilio = st.text_input("4. Domicilio")
+                edad      = st.number_input("5. Edad", min_value=0, max_value=120, step=1)
 
-            submitted = st.form_submit_button("Guardar", disabled=not st.session_state.location_granted)
-
-            if submitted and st.session_state.location_granted:
-                try:
-                    with get_connection() as conn:
-                        c = conn.cursor()
-                        c.execute('''INSERT INTO capturas (usuario, nombre, seccion, telefono, domicilio, edad, latitud, longitud)
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                                  (st.session_state.usuario, nombre, seccion, telefono, domicilio, edad,
-                                   st.session_state.lat, st.session_state.lon))
-                        conn.commit()
-                    st.success("Guardado correctamente", icon="✅")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                if st.form_submit_button("Guardar"):
+                    if not all([nombre, seccion, telefono, domicilio, edad]):
+                        st.error("Todos los campos son obligatorios")
+                    elif len(telefono) != 10 or not telefono.isdigit():
+                        st.error("El teléfono debe tener 10 dígitos numéricos")
+                    else:
+                        try:
+                            with get_connection() as conn:
+                                c = conn.cursor()
+                                c.execute('''INSERT INTO capturas 
+                                             (usuario, nombre, seccion, telefono, domicilio, edad, latitud, longitud)
+                                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                                          (st.session_state.usuario, nombre, seccion, telefono, domicilio, edad,
+                                           st.session_state.lat, st.session_state.lng))
+                                conn.commit()
+                            st.success("¡Registro guardado correctamente!", icon="✅")
+                            st.toast("Datos registrados con éxito", icon="✅")
+                            # Limpiar ubicación después de guardar (opcional)
+                            # st.session_state.location_granted = False
+                        except Exception as e:
+                            st.error(f"Error al guardar: {e}")
