@@ -41,13 +41,13 @@ if 'location_granted' not in st.session_state:
     st.session_state.lat = None
     st.session_state.lon = None
 
-# Login
+# Login (sin cambios)
 if not st.session_state.logged:
     st.title("Iniciar Sesión")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        usuario = st.text_input("Usuario")
-        contraseña = st.text_input("Contraseña", type="password")
+        usuario = st.text_input("Usuario", placeholder="Ej: admin o tu nombre")
+        contraseña = st.text_input("Contraseña", type="password", placeholder="Ej: 1234 o demo")
 
         if st.button("Entrar"):
             if usuario.strip().lower() == "admin" and contraseña == "1234":
@@ -109,39 +109,42 @@ else:
 
         st.info("Necesitamos tu ubicación actual para registrar el dato.")
 
-        # Solicitud de ubicación con botón visible y detección automática
+        # Solicitud de ubicación con botón visible
         if not st.session_state.location_granted:
             st.warning("Pulsa el botón para activar la ubicación")
 
-            if st.button("Obtener mi ubicación", type="primary"):
+            if st.button("Activar mi ubicación", type="primary"):
                 st.components.v1.html("""
                     <script>
-                    function sendLocation(position) {
-                        const lat = position.coords.latitude;
-                        const lon = position.coords.longitude;
-                        window.parent.postMessage({type: 'location', lat: lat, lon: lon}, "*");
-                    }
-
-                    function sendError(error) {
-                        window.parent.postMessage({type: 'location_error', msg: error.message}, "*");
-                    }
-
-                    navigator.geolocation.getCurrentPosition(sendLocation, sendError, {
-                        enableHighAccuracy: true,
-                        timeout: 8000,
-                        maximumAge: 0
-                    });
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+                            const url = new URL(window.location);
+                            url.searchParams.set('loc_status', 'ok');
+                            url.searchParams.set('lat', lat);
+                            url.searchParams.set('lon', lon);
+                            window.location = url;
+                        },
+                        (error) => {
+                            const url = new URL(window.location);
+                            url.searchParams.set('loc_status', 'denied');
+                            url.searchParams.set('msg', error.message);
+                            window.location = url;
+                        },
+                        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                    );
                     </script>
                 """, height=0)
 
-            # Escuchar mensajes del JS (usamos st.components para simular)
-            # Nota: Streamlit no tiene listener directo, así que usamos query params como fallback
+            # Leer parámetros después de recarga
             if "loc_status" in st.query_params:
                 if st.query_params["loc_status"] == "ok":
                     st.session_state.location_granted = True
                     st.session_state.lat = float(st.query_params.get("lat", [0])[0])
                     st.session_state.lon = float(st.query_params.get("lon", [0])[0])
-                    st.success("Ubicación obtenida")
+                    st.success("Ubicación activada")
+                    # Limpiar params
                     del st.query_params["loc_status"]
                     del st.query_params["lat"]
                     del st.query_params["lon"]
@@ -149,8 +152,9 @@ else:
                 else:
                     st.error("Ubicación denegada: " + st.query_params.get("msg", ["error"])[0])
                     del st.query_params["loc_status"]
+
         else:
-            st.success(f"Ubicación: {st.session_state.lat:.5f}, {st.session_state.lon:.5f}")
+            st.success(f"Ubicación activa: {st.session_state.lat:.5f}, {st.session_state.lon:.5f}")
 
         # Formulario
         with st.form("form"):
