@@ -4,7 +4,7 @@ import pandas as pd
 import os
 
 # ────────────────────────────────────────────────
-# Configuración general
+# Configuración
 # ────────────────────────────────────────────────
 st.set_page_config(page_title="Captura de Datos - DEMO", layout="wide")
 
@@ -131,9 +131,6 @@ else:
             st.error(f"Error al leer la base de datos: {e}")
 
     else:
-        # ────────────────────────────────────────────────
-        # Vista de usuario normal con solicitud visible de ubicación
-        # ────────────────────────────────────────────────
         st.title("📝 Captura de Datos")
         st.markdown(f"Logueado como: **{st.session_state.usuario}**")
 
@@ -174,7 +171,7 @@ else:
                     </script>
                 """, height=0)
 
-            # Leer parámetros de la URL después de la recarga
+            # Leer parámetros de la URL después de recarga
             if "location_status" in st.query_params:
                 status = st.query_params["location_status"]
                 if status == "success" and "lat" in st.query_params and "lon" in st.query_params:
@@ -182,21 +179,22 @@ else:
                     st.session_state.lat = float(st.query_params["lat"])
                     st.session_state.lon = float(st.query_params["lon"])
                     st.success("¡Ubicación obtenida correctamente!")
-                    # Limpiar parámetros para evitar loops
-                    del st.query_params["location_status"]
-                    del st.query_params["lat"]
-                    del st.query_params["lon"]
+                    # Limpiar params
+                    for key in ["location_status", "lat", "lon"]:
+                        if key in st.query_params:
+                            del st.query_params[key]
                     st.rerun()
                 elif status == "error":
                     st.session_state.location_granted = False
-                    st.error("No se pudo obtener la ubicación. Debes permitir el acceso para poder guardar registros.")
+                    st.error("No se pudo obtener la ubicación. Debes permitir el acceso.")
                     st.info("Por favor activa la ubicación y vuelve a intentarlo.")
-                    # Limpiar parámetros
-                    del st.query_params["location_status"]
+                    # Limpiar params
+                    if "location_status" in st.query_params:
+                        del st.query_params["location_status"]
         else:
             st.success(f"Ubicación activa: {st.session_state.lat:.6f}, {st.session_state.lon:.6f}")
 
-        # Formulario (solo visible si hay ubicación)
+        # Formulario
         if st.session_state.location_granted:
             with st.form("form_captura", clear_on_submit=True):
                 nombre    = st.text_input("1. Nombre")
