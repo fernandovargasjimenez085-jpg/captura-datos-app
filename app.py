@@ -4,7 +4,7 @@ import pandas as pd
 import os
 
 # ────────────────────────────────────────────────
-# Configuración
+# Configuración general
 # ────────────────────────────────────────────────
 st.set_page_config(page_title="Captura de Datos - DEMO", layout="wide")
 
@@ -78,10 +78,10 @@ if not st.session_state.logged:
                     st.error("Contraseña incorrecta")
 
 else:
+    # ────────────────────────────────────────────────
+    # Vista según rol
+    # ────────────────────────────────────────────────
     if st.session_state.is_admin:
-        # ────────────────────────────────────────────────
-        # Panel Administrador (igual que antes, con filtro por usuario)
-        # ────────────────────────────────────────────────
         st.title("🛠 Panel Administrador")
         st.markdown(f"Logueado como: **{st.session_state.usuario}**")
         if st.button("Cerrar sesión"):
@@ -145,46 +145,58 @@ else:
             st.session_state.lon = None
             st.rerun()
 
-        # Mensaje y botón visible para solicitar ubicación
-        st.info("**Importante:** Para continuar, necesitamos tu ubicación actual. Esto nos permite asociar el registro con tu posición geográfica.")
+        # Solicitud visible de ubicación
+        st.info("**Importante:** Para continuar, necesitamos tu ubicación actual. Esto permite asociar el registro con tu posición geográfica.")
 
         if not st.session_state.location_granted:
             st.warning("Haz clic en el botón para permitir el acceso a tu ubicación")
+
             if st.button("Activar mi ubicación", type="primary", key="request_location"):
-                # JavaScript para solicitar ubicación
                 st.components.v1.html("""
                     <script>
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             const lat = position.coords.latitude;
                             const lon = position.coords.longitude;
-                            window.parent.postMessage({type: 'location_success', lat: lat, lon: lon}, "*");
+                            const url = new URL(window.location);
+                            url.searchParams.set('location_status', 'success');
+                            url.searchParams.set('lat', lat);
+                            url.searchParams.set('lon', lon);
+                            window.location = url;
                         },
                         (error) => {
-                            window.parent.postMessage({type: 'location_error', message: error.message}, "*");
+                            const url = new URL(window.location);
+                            url.searchParams.set('location_status', 'error');
+                            window.location = url;
                         },
                         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                     );
                     </script>
                 """, height=0)
 
-            # Escuchar respuesta del JS
-            if "type" in st.experimental_get_query_params():
-                params = st.experimental_get_query_params()
-                if params["type"][0] == "location_success":
+            # Leer parámetros de la URL después de la recarga
+            if "location_status" in st.query_params:
+                status = st.query_params["location_status"]
+                if status == "success" and "lat" in st.query_params and "lon" in st.query_params:
                     st.session_state.location_granted = True
-                    st.session_state.lat = float(params["lat"][0])
-                    st.session_state.lon = float(params["lon"][0])
-                    st.success("¡Ubicación activada correctamente!")
+                    st.session_state.lat = float(st.query_params["lat"])
+                    st.session_state.lon = float(st.query_params["lon"])
+                    st.success("¡Ubicación obtenida correctamente!")
+                    # Limpiar parámetros para evitar loops
+                    del st.query_params["location_status"]
+                    del st.query_params["lat"]
+                    del st.query_params["lon"]
                     st.rerun()
-                elif params["type"][0] == "location_error":
+                elif status == "error":
                     st.session_state.location_granted = False
                     st.error("No se pudo obtener la ubicación. Debes permitir el acceso para poder guardar registros.")
                     st.info("Por favor activa la ubicación y vuelve a intentarlo.")
+                    # Limpiar parámetros
+                    del st.query_params["location_status"]
         else:
-            st.success("Ubicación activa: " + f"{st.session_state.lat:.6f}, {st.session_state.lon:.6f}")
+            st.success(f"Ubicación activa: {st.session_state.lat:.6f}, {st.session_state.lon:.6f}")
 
-        # Formulario (solo se muestra si la ubicación está activada)
+        # Formulario (solo visible si hay ubicación)
         if st.session_state.location_granted:
             with st.form("form_captura", clear_on_submit=True):
                 nombre    = st.text_input("1. Nombre")
